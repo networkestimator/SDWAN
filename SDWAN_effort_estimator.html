@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SD-WAN Effort Estimator</title>
+  <style>
+    :root{--brand:#ff5a36;--bg:#eef2f7;--panel:#fff;--line:#d6deea;--text:#12233d;--muted:#5e708c;--shadow:0 14px 28px rgba(16,35,61,.10);--max:1480px;--pad:clamp(20px,3vw,32px)}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .page{max-width:var(--max);margin:0 auto 36px;padding:0 var(--pad)} .hero{background:var(--brand);color:#fff;border-radius:16px;padding:18px 22px;box-shadow:var(--shadow);margin-bottom:16px}
+    .hero h1{margin:0 0 8px;font-size:27px;font-weight:800} .hero p{margin:0;font-size:14px;opacity:.95}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px} .btn{border:none;border-radius:10px;min-height:38px;padding:0 14px;font-size:14px;font-weight:700;cursor:pointer;background:var(--brand);color:#fff}
+    .btn.ghost{background:#fff;color:var(--text);border:1px solid var(--line)} .layout{display:grid;grid-template-columns:430px 1fr;gap:18px;align-items:start}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+    .panel-title{margin:0;padding:14px 16px;font-size:16px;font-weight:800;background:linear-gradient(180deg,#f7f9fd,#eef3f9);border-bottom:1px solid var(--line)}
+    .panel-body{padding:16px} .section-label{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800}
+    .input-grid,.stack{display:grid;gap:12px} .field{display:grid;grid-template-columns:1fr 180px;gap:12px;align-items:center} .field label{font-size:14px;line-height:1.35}
+    input,select{width:100%;height:34px;border:1px solid #bcc8da;border-radius:8px;padding:0 10px;font-size:14px;background:#fff;color:var(--text)}
+    .summary-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px} .summary-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;box-shadow:var(--shadow)}
+    .summary-card .label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;color:#000;margin-bottom:6px} .summary-card .value{font-size:20px;font-weight:900;line-height:1.1;color:var(--brand)}
+    table{width:100%;border-collapse:collapse;font-size:14px} th,td{border:1px solid #c6d0df;padding:9px 10px;text-align:left;vertical-align:middle} th{background:#f2f6fb;font-weight:800} td.num,th.num{text-align:right}
+    .note{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.5} .callout{background:#fff8f6;border:1px solid #ffd2cb;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5} .callout strong{color:var(--brand)}
+    .global-logo-row{display:flex;align-items:center;justify-content:flex-start;width:min(100%,var(--max));margin:12px auto 10px;padding:0 var(--pad)} .global-logo img{display:block;height:24px;width:auto;max-width:160px}
+    .footer-center{text-align:center;margin:30px 0 10px;font-size:13px;color:#6b7280}
+    @media (max-width:1100px){.layout{grid-template-columns:1fr}.summary-grid{grid-template-columns:repeat(2,1fr)}} @media (max-width:640px){.summary-grid{grid-template-columns:1fr}.field{grid-template-columns:1fr}.toolbar{flex-direction:column}.btn{width:100%}}
+    @media print{.toolbar,.global-logo-row{display:none}.page{max-width:none;margin:0;padding:0}.panel,.summary-card,.hero{box-shadow:none}}
+  </style>
+</head>
+<body>
+  <div class="global-logo-row"><div class="global-logo"><img src="https://s7d1.scene7.com/is/image/kyndryl/logo-header?qlt=85&ts=1712781462020&$SVG-Transparency$&dpr=off" alt="" aria-hidden="true" /></div></div>
+  <div class="page">
+    <section class="hero">
+      <h1>SD-WAN Effort Estimator</h1>
+      <p>Cloudflare-style estimator rebuilt from the SD-WAN workbook logic: sizing, baseline lookup, uplifts, implementation component math, hypercare, role split, and vendor multiplier.</p>
+    </section>
+    <div class="toolbar">
+      <button class="btn" id="loadSample">Load Sample Values</button>
+      <button class="btn ghost" id="resetInputs">Reset Inputs</button>
+      <button class="btn ghost" id="exportExcel">Export to Excel</button>
+      <button class="btn ghost" id="printPdf">Print / Save PDF</button>
+    </div>
+    <div class="layout">
+      <section class="panel">
+        <h2 class="panel-title">Project Inputs</h2>
+        <div class="panel-body">
+          <div id="dynamicInputs"></div>
+          <div class="note">Workbook rules included: size score = sites + 2 x regions + transports/site + 2 x hub sites; uplifted discovery/design/testing; componentized implementation with HA uplift on branch and hub devices only; hypercare = 4% of implementation; final totals multiplied by vendor complexity.</div>
+        </div>
+      </section>
+      <section class="stack">
+        <div class="summary-grid">
+          <div class="summary-card"><span class="label">Project Size</span><span class="value" id="projectSize">-</span></div>
+          <div class="summary-card"><span class="label">Selected Vendor</span><span class="value" id="selectedVendor">-</span></div>
+          <div class="summary-card"><span class="label">Total Effort</span><span class="value" id="totalEngineering">0</span></div>
+          <div class="summary-card"><span class="label">Architect Hours</span><span class="value" id="architectTotal">0</span></div>
+          <div class="summary-card"><span class="label">Network SME Hours</span><span class="value" id="smeTotal">0</span></div>
+        </div>
+        <div class="callout" id="summaryCallout"></div>
+        <section class="panel"><h2 class="panel-title">Phase Summary</h2><div class="panel-body"><table><thead><tr><th>Phase</th><th class="num">Base Hours</th><th class="num">Architect Hrs</th><th class="num">SME Hrs</th><th class="num">Net Admin Hrs</th></tr></thead><tbody id="phaseSummaryBody"></tbody></table></div></section>
+        <section class="panel"><h2 class="panel-title">Uplift Breakdown</h2><div class="panel-body"><table><thead><tr><th>Adjustment</th><th>Rule</th><th class="num">Value</th></tr></thead><tbody id="upliftBody"></tbody></table></div></section>
+        <section class="panel"><h2 class="panel-title">Implementation Components</h2><div class="panel-body"><table><thead><tr><th>Component</th><th class="num">Qty</th><th class="num">Hrs/Unit</th><th class="num">Sub-Total</th><th>HA Uplift?</th><th class="num">HA Hrs</th></tr></thead><tbody id="implementationBody"></tbody></table></div></section>
+      </section>
+    </div>
+    <div class="footer-center">Copyright &copy; 2026 Kyndryl Inc. All rights reserved</div>
+  </div>
+  <script>
+    const STORAGE_KEY="sdwan_effort_estimator_v1";
+    const BASELINES={Small:{discovery:32,design:64,testing:24,implementationBase:160,hypercarePct:.04},Medium:{discovery:56,design:120,testing:48,implementationBase:320,hypercarePct:.04},Large:{discovery:100,design:220,testing:80,implementationBase:600,hypercarePct:.04}};
+    const VENDORS=[{value:"",label:"Select Vendor",multiplier:1.2},{value:"Cisco Catalyst SD-WAN",label:"Cisco Catalyst SD-WAN (Viptela)",multiplier:1.3},{value:"Cisco Meraki SD-WAN",label:"Cisco Meraki SD-WAN",multiplier:1},{value:"VMware VeloCloud",label:"VMware VeloCloud (Broadcom SD-WAN)",multiplier:1.2},{value:"Fortinet Secure SD-WAN",label:"Fortinet Secure SD-WAN (FortiGate)",multiplier:1.1},{value:"Palo Alto Prisma SD-WAN",label:"Palo Alto Prisma SD-WAN",multiplier:1.25},{value:"Aruba EdgeConnect",label:"Silver Peak / Aruba EdgeConnect",multiplier:1.15},{value:"Versa Networks",label:"Versa Networks FlexVNF",multiplier:1.35},{value:"Aryaka SmartServices",label:"Aryaka SmartServices",multiplier:.9},{value:"Cato Networks",label:"Cato Networks SASE Cloud",multiplier:.85},{value:"Zscaler ZT SD-WAN",label:"Zscaler Zero Trust SD-WAN",multiplier:1.2},{value:"Juniper Session Smart",label:"Juniper Session Smart Router (128T)",multiplier:1.3},{value:"Barracuda CloudGen",label:"Barracuda CloudGen WAN",multiplier:1},{value:"Other/Custom",label:"Other / Custom",multiplier:1.2}];
+    const ROLE_SPLITS={Discovery:{architect:.30,sme:.49,netAdmin:.21},Design:{architect:.70,sme:.21,netAdmin:.09},Testing:{architect:.30,sme:.49,netAdmin:.21},Implementation:{architect:.30,sme:.49,netAdmin:.21},Hypercare:{architect:.30,sme:.49,netAdmin:.21}};
+    const fields=[
+      {key:"deploymentModel",label:"Deployment Model",section:"General Project Information",type:"select",options:["Greenfield","Brownfield","Hybrid"]},
+      {key:"sites",label:"Number of Sites / Branches",section:"General Project Information",type:"number",min:0,step:1,default:0},
+      {key:"hubSites",label:"Number of Data Center / Hub Sites",section:"General Project Information",type:"number",min:0,step:1,default:0},
+      {key:"regions",label:"Number of Regions / Geographic Zones",section:"General Project Information",type:"number",min:0,step:1,default:0},
+      {key:"environments",label:"Number of Environments",section:"General Project Information",type:"number",min:1,step:1,default:1},
+      {key:"automationRequired",label:"Automation / Orchestration Required",section:"General Project Information",type:"select",options:["No","Yes"],default:"No"},
+      {key:"ztnaRequired",label:"ZTNA Required",section:"General Project Information",type:"select",options:["No","Yes"],default:"No"},
+      {key:"vendor",label:"Primary SD-WAN Vendor",section:"Platform & Vendor Selection",type:"vendor",default:""},
+      {key:"otherVendor",label:"Other Vendor Name",section:"Platform & Vendor Selection",type:"text",placeholder:"Used only when Other / Custom is selected"},
+      {key:"transportsPerSite",label:"WAN Transport Links per Site",section:"Architecture & Topology",type:"number",min:0,step:1,default:1},
+      {key:"overlayTunnels",label:"Overlay Tunnels",section:"Architecture & Topology",type:"number",min:0,step:1,default:0},
+      {key:"vrfs",label:"VRFs / Routing Segments",section:"Architecture & Topology",type:"number",min:0,step:1,default:0},
+      {key:"hubSpoke",label:"Hub-and-Spoke Topology Required",section:"Architecture & Topology",type:"select",options:["No","Yes"],default:"No"},
+      {key:"fullMesh",label:"Full Mesh Topology Required",section:"Architecture & Topology",type:"select",options:["No","Yes"],default:"No"},
+      {key:"hybridTopology",label:"Hybrid Topology Required",section:"Architecture & Topology",type:"select",options:["No","Yes"],default:"No"},
+      {key:"multiTenancy",label:"Multi-Tenancy / Segmentation Required",section:"Architecture & Topology",type:"select",options:["No","Yes"],default:"No"},
+      {key:"haRequired",label:"High Availability / Redundancy Required",section:"Architecture & Topology",type:"select",options:["No","Yes"],default:"No"},
+      {key:"breakoutPoints",label:"Internet Breakout / Exit Points",section:"Architecture & Topology",type:"number",min:0,step:1,default:0},
+      {key:"cloudOnRamps",label:"Cloud On-Ramps",section:"Architecture & Topology",type:"number",min:0,step:1,default:0},
+      {key:"ngfw",label:"NGFW Integration",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"ips",label:"IPS Required",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"sslInspection",label:"SSL/TLS Inspection Required",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"urlFiltering",label:"URL Filtering / Content Inspection",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"saseIntegration",label:"Cloud Security (SASE/SSE) Integration",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"complianceFramework",label:"Compliance Framework",section:"Security & Compliance",type:"select",options:["None","PCI-DSS","HIPAA","ISO27001"]},
+      {key:"mfaIdp",label:"MFA / Identity-Based Access (IdP)",section:"Security & Compliance",type:"select",options:["No","Yes"],default:"No"},
+      {key:"legacyMigration",label:"Migration from Legacy MPLS / WAN",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"existingSdwanMigration",label:"Migration from Existing SD-WAN Platform",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"legacySites",label:"Legacy Sites to Migrate",section:"Integration & Migration",type:"number",min:0,step:1,default:0},
+      {key:"ipamDns",label:"IPAM / DNS Integration Required",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"nocItsm",label:"NOC / ITSM Integration",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"siemAnalytics",label:"SIEM / Analytics Integration",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"routingPreserve",label:"Existing BGP / OSPF Peering to Preserve",section:"Integration & Migration",type:"select",options:["No","Yes"],default:"No"},
+      {key:"centralOrchestration",label:"Centralised Orchestration / Controller",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"ztpRequired",label:"Zero-Touch Provisioning Required",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"monitoringSetup",label:"Network Monitoring & Alerting Setup",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"analyticsDashboard",label:"SD-WAN Analytics / Reporting Dashboard",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"trainingRequired",label:"Training Delivery Required",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"documentationRequired",label:"Documentation Required",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"},
+      {key:"pocRequired",label:"Proof of Concept (PoC) Required",section:"Operations & Management",type:"select",options:["No","Yes"],default:"No"}
+    ];
+    const SAMPLE_INPUTS={deploymentModel:"Hybrid",sites:48,hubSites:3,regions:2,environments:2,automationRequired:"Yes",ztnaRequired:"Yes",vendor:"Fortinet Secure SD-WAN",transportsPerSite:3,overlayTunnels:60,vrfs:6,hubSpoke:"Yes",fullMesh:"No",hybridTopology:"Yes",multiTenancy:"Yes",haRequired:"Yes",breakoutPoints:8,cloudOnRamps:3,ngfw:"Yes",ips:"Yes",sslInspection:"Yes",urlFiltering:"Yes",saseIntegration:"Yes",complianceFramework:"ISO27001",mfaIdp:"Yes",legacyMigration:"Yes",existingSdwanMigration:"No",legacySites:30,ipamDns:"Yes",nocItsm:"Yes",siemAnalytics:"Yes",routingPreserve:"Yes",centralOrchestration:"Yes",ztpRequired:"Yes",monitoringSetup:"Yes",analyticsDashboard:"Yes",trainingRequired:"Yes",documentationRequired:"Yes",pocRequired:"No"};
+    const implementationDefinitions=[
+      {label:"CPE / Branch Device",qty:i=>i.sites,unitHours:16,ha:true},{label:"Data Centre / Hub Device",qty:i=>i.hubSites,unitHours:24,ha:true},
+      {label:"WAN Transport Link Config",qty:i=>i.sites*i.transportsPerSite,unitHours:4},{label:"Overlay Tunnel",qty:i=>i.overlayTunnels,unitHours:3},
+      {label:"VRF / Routing Segment",qty:i=>i.vrfs,unitHours:6},{label:"Internet Breakout / Exit Config",qty:i=>i.breakoutPoints,unitHours:8},
+      {label:"Cloud On-Ramp",qty:i=>i.cloudOnRamps,unitHours:20},{label:"ZTP Template / Profile",qty:i=>yes(i.centralOrchestration)?i.sites:0,unitHours:2},
+      {label:"NGFW Policy Config",qty:i=>yes(i.ngfw)?i.sites*2:0,unitHours:3},{label:"IPS Signature / Policy Tuning",qty:i=>yes(i.ips)?1:0,unitHours:12},
+      {label:"SSL/TLS Inspection Setup",qty:i=>yes(i.sslInspection)?1:0,unitHours:10},{label:"URL / Content Filter Profile",qty:i=>yes(i.urlFiltering)?1:0,unitHours:6},
+      {label:"SASE / SSE Integration",qty:i=>yes(i.saseIntegration)?1:0,unitHours:24},{label:"ZTNA Policy & IdP Integration",qty:i=>yes(i.mfaIdp)?1:0,unitHours:20},
+      {label:"NOC / ITSM Integration",qty:i=>yes(i.nocItsm)?1:0,unitHours:16},{label:"Monitoring Dashboard Setup",qty:i=>yes(i.monitoringSetup)?1:0,unitHours:16},
+      {label:"SD-WAN Analytics / Reporting",qty:i=>yes(i.analyticsDashboard)?1:0,unitHours:12},{label:"Multi-Tenancy / Segmentation Setup",qty:i=>yes(i.multiTenancy)?i.vrfs:0,unitHours:8},
+      {label:"Hub-Spoke Topology Config",qty:i=>yes(i.hubSpoke)?1:0,unitHours:16},{label:"Full Mesh Topology Config",qty:i=>yes(i.fullMesh)?1:0,unitHours:24},
+      {label:"Legacy MPLS/WAN Migration per Site",qty:i=>i.legacySites,unitHours:12},{label:"IPAM / DNS Integration",qty:i=>yes(i.ipamDns)?1:0,unitHours:8},
+      {label:"BGP/OSPF Peering Preservation",qty:i=>yes(i.routingPreserve)?1:0,unitHours:10},{label:"Training Delivery",qty:i=>yes(i.trainingRequired)?1:0,unitHours:16},
+      {label:"Documentation (HLD/LLD/Runbooks)",qty:i=>yes(i.documentationRequired)?1:0,unitHours:24},{label:"Proof of Concept (PoC) Phase",qty:i=>yes(i.pocRequired)?1:0,unitHours:40}
+    ];
+    const fmt=v=>Number(v||0).toFixed(2).replace(/\.00$/,"").replace(/(\.\d*[1-9])0$/,"$1");
+    const pct=v=>`${fmt(Number(v||0)*100)}%`;
+    const yes=v=>String(v||"").trim().toLowerCase()==="yes";
+    const size=s=>s>=50?"Large":s>=20?"Medium":"Small";
+    const groups=()=>fields.reduce((a,f)=>{(a[f.section]||(a[f.section]=[])).push(f); return a;},{});
+    const vendorMeta=(vendor,other)=>{const v=VENDORS.find(x=>x.value===vendor)||VENDORS[0]; return {name:vendor==="Other/Custom"&&other?other:(v.value||"-"),multiplier:v.multiplier};};
+    function fieldMarkup(f){
+      if(f.type==="vendor") return `<div class="field"><label for="${f.key}">${f.label}</label><select id="${f.key}">${VENDORS.map(v=>`<option value="${v.value}">${v.label}</option>`).join("")}</select></div>`;
+      if(f.type==="select") return `<div class="field"><label for="${f.key}">${f.label}</label><select id="${f.key}"><option value=""></option>${f.options.map(o=>`<option value="${o}">${o}</option>`).join("")}</select></div>`;
+      const attrs=[`id="${f.key}"`,`type="${f.type}"`,f.min!==undefined?`min="${f.min}"`:"",f.step!==undefined?`step="${f.step}"`:"",f.placeholder?`placeholder="${f.placeholder}"`:""].filter(Boolean).join(" ");
+      return `<div class="field"><label for="${f.key}">${f.label}</label><input ${attrs} /></div>`;
+    }
+    function renderInputs(){
+      document.getElementById("dynamicInputs").innerHTML=Object.entries(groups()).map(([section,list])=>`<div style="margin-bottom:18px;"><div class="section-label">${section}</div><div class="input-grid">${list.map(fieldMarkup).join("")}</div></div>`).join("");
+      fields.forEach(f=>{const el=document.getElementById(f.key); if(!el)return; if(f.default!==undefined) el.value=f.default; el.addEventListener("input",render); el.addEventListener("change",render);});
+    }
+    function getInputs(){
+      const out={};
+      fields.forEach(f=>{const el=document.getElementById(f.key); out[f.key]=!el?(f.type==="number"?0:""):(f.type==="number"?Math.max(Number(f.min||0),Number(el.value||0)):(el.value||""));});
+      return out;
+    }
+    function hasInput(i){return fields.some(f=>f.type==="number"?Number(i[f.key]||0)>0:String(i[f.key]||"").trim()!=="");}
+    function calculate(i){
+      const meta=vendorMeta(i.vendor,i.otherVendor);
+      if(!hasInput(i)) return {sizeScore:0,projectSize:"-",selectedVendor:meta.name,vendorMultiplier:meta.multiplier,baseline:BASELINES.Small,uplifts:[],totalBaselineUplift:0,implementationRows:[],implementationSubtotal:0,implementationTotal:0,hypercareHours:0,phaseRows:[],preVendorTotal:0,finalTotal:0,finalArchitectHours:0,finalSmeHours:0,finalNetAdminHours:0};
+      const sizeScore=i.sites+i.regions*2+i.transportsPerSite+i.hubSites*2, projectSize=size(sizeScore), baseline=BASELINES[projectSize];
+      const security=Math.min(.2,(yes(i.ngfw) ? .07 : 0)+(yes(i.ips) ? .07 : 0)+(yes(i.sslInspection) ? .07 : 0));
+      const uplifts=[
+        {label:"Environment uplift",rule:"Each additional environment beyond 1",value:i.environments>1?(i.environments-1)*.2:0},
+        {label:"Automation / orchestration uplift",rule:"Yes = +20%",value:yes(i.automationRequired) ? .2 : 0},
+        {label:"Migration uplift",rule:"Legacy WAN migration = +25%",value:yes(i.legacyMigration) ? .25 : 0},
+        {label:"ZTNA / SASE uplift",rule:"ZTNA required = +15%",value:yes(i.ztnaRequired) ? .15 : 0},
+        {label:"Security add-ons uplift",rule:"NGFW + IPS + SSL, 7% each capped at 20%",value:security}
+      ];
+      const totalBaselineUplift=uplifts.reduce((s,r)=>s+r.value,0);
+      const implementationRows=implementationDefinitions.map(def=>{const qty=Number(def.qty(i)||0), subTotal=qty*def.unitHours, haHours=def.ha&&yes(i.haRequired)?subTotal*.15:0; return {label:def.label,qty,unitHours:def.unitHours,subTotal,haApplies:def.ha?"Yes":"No",haHours};});
+      const implementationSubtotal=implementationRows.reduce((s,r)=>s+r.subTotal,0), implementationTotal=implementationRows.reduce((s,r)=>s+r.subTotal+r.haHours,0), hypercareHours=implementationTotal*baseline.hypercarePct;
+      const phaseRows=[
+        {label:"Discovery",hours:baseline.discovery*(1+totalBaselineUplift)},{label:"Design",hours:baseline.design*(1+totalBaselineUplift)},{label:"Testing",hours:baseline.testing*(1+totalBaselineUplift)},{label:"Implementation",hours:implementationTotal},{label:"Hypercare",hours:hypercareHours}
+      ].map(row=>({...row,architectHours:row.hours*ROLE_SPLITS[row.label].architect,smeHours:row.hours*ROLE_SPLITS[row.label].sme,netAdminHours:row.hours*ROLE_SPLITS[row.label].netAdmin}));
+      const preVendorTotal=phaseRows.reduce((s,r)=>s+r.hours,0), finalTotal=preVendorTotal*meta.multiplier, finalArchitectHours=phaseRows.reduce((s,r)=>s+r.architectHours,0)*meta.multiplier, finalSmeHours=phaseRows.reduce((s,r)=>s+r.smeHours,0)*meta.multiplier, finalNetAdminHours=phaseRows.reduce((s,r)=>s+r.netAdminHours,0)*meta.multiplier;
+      return {sizeScore,projectSize,selectedVendor:meta.name,vendorMultiplier:meta.multiplier,baseline,uplifts,totalBaselineUplift,implementationRows,implementationSubtotal,implementationTotal,hypercareHours,phaseRows,preVendorTotal,finalTotal,finalArchitectHours,finalSmeHours,finalNetAdminHours};
+    }
+    function render(){
+      const inputs=getInputs(), result=calculate(inputs), haTotal=result.implementationRows.reduce((s,r)=>s+r.haHours,0);
+      document.getElementById("projectSize").textContent=result.projectSize;
+      document.getElementById("selectedVendor").textContent=result.selectedVendor;
+      document.getElementById("totalEngineering").textContent=fmt(result.finalTotal);
+      document.getElementById("architectTotal").textContent=fmt(result.finalArchitectHours);
+      document.getElementById("smeTotal").textContent=fmt(result.finalSmeHours);
+      document.getElementById("summaryCallout").innerHTML=`<strong>Workbook Summary:</strong> Size score ${fmt(result.sizeScore)} -> ${result.projectSize}. Baseline ${fmt(result.baseline.discovery)}/${fmt(result.baseline.design)}/${fmt(result.baseline.testing)}/${fmt(result.baseline.implementationBase)}. Uplift ${pct(result.totalBaselineUplift)}. Implementation ${fmt(result.implementationTotal)}. Hypercare ${fmt(result.hypercareHours)}. Pre-vendor ${fmt(result.preVendorTotal)}. Multiplier ${fmt(result.vendorMultiplier)}x.`;
+      document.getElementById("upliftBody").innerHTML=result.uplifts.map(r=>`<tr><td>${r.label}</td><td>${r.rule}</td><td class="num">${pct(r.value)}</td></tr>`).join("")+`<tr><td><strong>Total Baseline Uplift</strong></td><td></td><td class="num"><strong>${pct(result.totalBaselineUplift)}</strong></td></tr>`;
+      document.getElementById("implementationBody").innerHTML=result.implementationRows.map(r=>`<tr><td>${r.label}</td><td class="num">${fmt(r.qty)}</td><td class="num">${fmt(r.unitHours)}</td><td class="num">${fmt(r.subTotal)}</td><td>${r.haApplies}</td><td class="num">${fmt(r.haHours)}</td></tr>`).join("")+`<tr><td><strong>Implementation Sub-Total</strong></td><td></td><td></td><td class="num"><strong>${fmt(result.implementationSubtotal)}</strong></td><td></td><td class="num"><strong>${fmt(haTotal)}</strong></td></tr><tr><td><strong>Implementation Total</strong></td><td colspan="5" class="num"><strong>${fmt(result.implementationTotal)}</strong></td></tr>`;
+      document.getElementById("phaseSummaryBody").innerHTML=result.phaseRows.map(r=>`<tr><td>${r.label}</td><td class="num">${fmt(r.hours)}</td><td class="num">${fmt(r.architectHours*result.vendorMultiplier)}</td><td class="num">${fmt(r.smeHours*result.vendorMultiplier)}</td><td class="num">${fmt(r.netAdminHours*result.vendorMultiplier)}</td></tr>`).join("")+`<tr><td><strong>Total</strong></td><td class="num"><strong>${fmt(result.finalTotal)}</strong></td><td class="num"><strong>${fmt(result.finalArchitectHours)}</strong></td><td class="num"><strong>${fmt(result.finalSmeHours)}</strong></td><td class="num"><strong>${fmt(result.finalNetAdminHours)}</strong></td></tr>`;
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(inputs));}catch(e){}
+    }
+    function setInputs(values){fields.forEach(f=>{const el=document.getElementById(f.key); if(el) el.value=values[f.key]!==undefined&&values[f.key]!==null?values[f.key]:(f.default!==undefined?f.default:"");}); render();}
+    function exportExcel(){
+      const inputs=getInputs(), result=calculate(inputs), rows=[["Field","Value"]];
+      fields.forEach(f=>rows.push([f.label,inputs[f.key]??""])); rows.push([],["Metric","Value"],["Project Size Score",result.sizeScore],["Project Size",result.projectSize],["Selected Vendor",result.selectedVendor],["Vendor Multiplier",result.vendorMultiplier],["Total Baseline Uplift",result.totalBaselineUplift],["Implementation Total",result.implementationTotal],["Hypercare",result.hypercareHours],["Pre-Vendor Total",result.preVendorTotal],["Final Total",result.finalTotal],["Architect Hours",result.finalArchitectHours],["Network SME Hours",result.finalSmeHours],["Network Admin Hours",result.finalNetAdminHours],[],["Adjustment","Rule","Value"]);
+      result.uplifts.forEach(r=>rows.push([r.label,r.rule,r.value])); rows.push([],["Component","Qty","Hrs/Unit","Sub-Total","HA Uplift?","HA Hrs"]); result.implementationRows.forEach(r=>rows.push([r.label,r.qty,r.unitHours,r.subTotal,r.haApplies,r.haHours])); rows.push([],["Phase","Base Hours","Architect Hrs","SME Hrs","Net Admin Hrs"]); result.phaseRows.forEach(r=>rows.push([r.label,r.hours,r.architectHours*result.vendorMultiplier,r.smeHours*result.vendorMultiplier,r.netAdminHours*result.vendorMultiplier]));
+      const html=`<table border="1">${rows.map(row=>`<tr>${(row.length?row:[""]).map(cell=>`<td>${cell??""}</td>`).join("")}</tr>`).join("")}</table>`, blob=new Blob([html],{type:"application/vnd.ms-excel"}), url=URL.createObjectURL(blob), a=document.createElement("a");
+      a.href=url; a.download="sdwan_effort_estimator.xls"; a.click(); URL.revokeObjectURL(url);
+    }
+    document.getElementById("loadSample").addEventListener("click",()=>setInputs(SAMPLE_INPUTS));
+    document.getElementById("resetInputs").addEventListener("click",()=>setInputs({}));
+    document.getElementById("exportExcel").addEventListener("click",exportExcel);
+    document.getElementById("printPdf").addEventListener("click",()=>window.print());
+    renderInputs(); try{const saved=localStorage.getItem(STORAGE_KEY); saved?setInputs(JSON.parse(saved)):setInputs({});}catch(e){setInputs({});}
+  </script>
+</body>
+</html>
